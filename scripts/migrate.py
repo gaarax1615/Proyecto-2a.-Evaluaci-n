@@ -7,6 +7,7 @@ usando embedding + linking según el diseño del proyecto.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from pathlib import Path
@@ -15,8 +16,8 @@ from pymongo import MongoClient
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SQL = ROOT / "data" / "BDAutosU2.sql"
-DEFAULT_URI = "mongodb://localhost:27017"
-DB_NAME = "bdautos"
+DEFAULT_URI = os.environ.get("MONGODB_URI", "mongodb://localhost:27017")
+DB_NAME = os.environ.get("MONGODB_DB", "bdautos")
 
 INSERT_RE = re.compile(
     r"INSERT\s+INTO\s+(\w+)\s+VALUES\s*\((.+)\);",
@@ -176,18 +177,30 @@ def migrate(sql_path: Path, uri: str, drop: bool = True) -> dict[str, int]:
     client.admin.command("ping")
     db = client[DB_NAME]
 
-    if drop:
-        for name in ("continents", "countries", "makers", "cars"):
-            db[name].drop()
+    documents = {
+        "continents": continents,
+        "countries": countries,
+        "makers": makers,
+        "cars": cars,
+    }
+    for name, items in documents.items():
+        collection = db[name]
+        if drop:
+            collection.drop()
+            if items:
+                collection.insert_many(items)
+        else:
+            for item in items:
+                collection.replace_one({"_id": item["_id"]}, item, upsert=True)
 
-    if continents:
-        db.continents.insert_many(continents)
-    if countries:
-        db.countries.insert_many(countries)
-    if makers:
-        db.makers.insert_many(makers)
-    if cars:
-        db.cars.insert_many(cars)
+    db.countries.create_index("continentId")
+    db.makers.create_index("countryId")
+    db.makers.create_index("models.modelId")
+    db.cars.create_index("makerId")
+    db.cars.create_index("modelId")
+    db.cars.create_index("country.name")
+    db.cars.create_index("continent.name")
+    db.cars.create_index([("year", 1), ("mpg", 1)])
 
     counts = {
         "continents": db.continents.count_documents({}),

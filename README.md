@@ -16,13 +16,14 @@ Documentación de decisiones (qué / cómo / por qué): carpeta [`docs/`](docs/)
 ## Estructura
 
 ```
-proyecto2doParcial/
+Proyecto-2a.-Evaluaci-n/
   data/BDAutosU2.sql
   scripts/migrate.py
   scripts/02_consultas.js
   scripts/export_consultas_js.py
   scripts/generate_report.py
   app/main.py · gui.py · queries.py · db.py · requirements.txt
+  docker-compose.yml
   docs/00_bitacora.md … 04_entrega.md
   reporte/reporte_proyecto2a.pdf
   reporte/reporte_proyecto2a.html
@@ -33,26 +34,34 @@ proyecto2doParcial/
 
 - **Python 3.12 de Homebrew** (con Tk): `brew install python@3.12 python-tk@3.12`  
   No uses el Python del sistema (`/usr/bin/python3`): en macOS la ventana Tk no aparece.
-- MongoDB en `localhost:27017` (`brew services start mongodb-community`)
+- Docker Desktop con soporte para `docker compose`
 
 ## Puesta en marcha
 
 ```bash
-cd proyecto2doParcial
+cd Proyecto-2a.-Evaluaci-n
 /opt/homebrew/bin/python3.12 -m venv .venv
 .venv/bin/pip install -r app/requirements.txt
 
-# Migrar datos
+# Iniciar MongoDB y migrar datos (persistente en un volumen Docker)
+docker compose up -d --wait mongodb
 .venv/bin/python scripts/migrate.py
 
 # App con interfaz gráfica
+# Este script también inicia MongoDB y sincroniza los datos automáticamente.
 ./iniciar.sh
 # o: .venv/bin/python app/main.py
 
 # Consultas en mongosh (opcional)
 mongosh scripts/02_consultas.js
 
-# Regenerar reporte HTML/PDF (Mongo debe estar migrado)
+# Detener MongoDB (los datos permanecen en el volumen)
+docker compose down
+
+# Eliminar también los datos persistidos, si se desea empezar de cero
+docker compose down -v
+
+# Regenerar reporte HTML/PDF (Mongo debe estar iniciado y migrado)
 .venv/bin/python scripts/generate_report.py
 ```
 

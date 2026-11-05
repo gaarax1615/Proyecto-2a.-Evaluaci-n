@@ -50,9 +50,17 @@ Incluye marcas aunque no tengan autos (necesario para Q13 y Q14). Ejemplo: Renau
 ## Cómo ejecutar la migración
 
 ```bash
-cd proyecto2doParcial
-# MongoDB debe escuchar en localhost:27017
+cd Proyecto-2a.-Evaluaci-n
+# Iniciar MongoDB reproducible mediante Docker Compose
+docker compose up -d --wait mongodb
 .venv/bin/python scripts/migrate.py
 ```
 
-Variables opcionales vía CLI: `--uri`, `--sql`, `--no-drop`.
+También puede ejecutarse `./iniciar.sh`, que inicia MongoDB y llama a la
+migración con `--no-drop` antes de abrir la aplicación. Variables opcionales:
+`MONGODB_URI`, `MONGODB_DB`, `--uri`, `--sql` y `--no-drop`.
+
+La migración también crea índices para `makerId`, `modelId`, país, continente,
+los filtros de año/rendimiento y las relaciones del catálogo. Con `--no-drop`
+los documentos se actualizan mediante `upsert`, por lo que el arranque puede
+repetirse sin duplicar información.

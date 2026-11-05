@@ -9,7 +9,7 @@ Se implementaron las 25 consultas del PDF `BDA_Py1_MongoDB` como pipelines en:
 
 ## Cómo
 
-Cada consulta es un dict con `id`, `title`, `description`, `collection` y `pipeline`. La app CLI las ejecuta con `collection.aggregate(pipeline)` e imprime código + resultado.
+Cada consulta es un dict con `id`, `title`, `description`, `collection` y `pipeline`. La GUI las ejecuta con `collection.aggregate(pipeline)` y muestra el código junto con el resultado.
 
 ## Por qué Aggregation Framework
 

@@ -11,7 +11,7 @@ import os
 import sys
 import traceback
 from pathlib import Path
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 
 os.environ.setdefault("TK_SILENCE_DEPRECATION", "1")
 
@@ -39,6 +39,140 @@ PANEL = "#FFFFFF"
 
 def dumps(obj) -> str:
     return json.dumps(json.loads(json_util.dumps(obj)), indent=2, ensure_ascii=False)
+
+
+def explain_pipeline(pipeline: list[dict]) -> str:
+    """Create a compact, educational explanation of each aggregation stage."""
+    stage_help = {
+        "$match": "Filtra y conserva solo los documentos que cumplen las condiciones.",
+        "$project": "Selecciona los campos de salida; 1 incluye y 0 excluye.",
+        "$sort": "Ordena los resultados; 1 es ascendente y -1 descendente.",
+        "$group": "Agrupa documentos y calcula valores por cada grupo.",
+        "$count": "Cuenta cuántos documentos llegan hasta esta etapa.",
+        "$limit": "Limita la cantidad de documentos que continúan.",
+        "$unwind": "Separa cada elemento de un arreglo en un documento independiente.",
+        "$lookup": "Relaciona esta colección con otra colección, como un JOIN.",
+        "$bucket": "Clasifica valores numéricos dentro de rangos definidos.",
+        "$addFields": "Agrega campos calculados sin eliminar los campos existentes.",
+        "$setWindowFields": "Calcula valores sobre ventanas o particiones de documentos.",
+        "$facet": "Ejecuta varias subconsultas en paralelo sobre los mismos documentos.",
+    }
+    operator_help = {
+        "$gte": "mayor o igual que",
+        "$gt": "mayor que",
+        "$lte": "menor o igual que",
+        "$lt": "menor que",
+        "$eq": "igual a",
+        "$ne": "distinto de",
+        "$or": "cumplir al menos una condición",
+        "$and": "cumplir todas las condiciones",
+        "$regex": "coincidir con un patrón de texto",
+        "$avg": "promedio",
+        "$sum": "suma o conteo cuando se suma 1",
+        "$min": "valor mínimo",
+        "$max": "valor máximo",
+        "$round": "redondeo",
+        "$size": "tamaño de un arreglo",
+        "$filter": "filtrado de elementos de un arreglo",
+        "$cond": "condición tipo si/entonces/sino",
+        "$switch": "varias condiciones tipo caso",
+        "$push": "acumular valores en un arreglo",
+        "$addToSet": "acumular valores únicos",
+        "$first": "tomar el primer valor según el orden previo",
+        "$slice": "tomar una parte de un arreglo",
+        "$divide": "división",
+        "$multiply": "multiplicación",
+        "$subtract": "resta",
+        "$rank": "posición dentro de una partición ordenada",
+    }
+
+    def operators(value: object) -> list[str]:
+        found: list[str] = []
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                if key.startswith("$") and key not in found:
+                    found.append(key)
+                for operator in operators(nested):
+                    if operator not in found:
+                        found.append(operator)
+        elif isinstance(value, list):
+            for nested in value:
+                for operator in operators(nested):
+                    if operator not in found:
+                        found.append(operator)
+        return found
+
+    lines = ["Lectura del pipeline, paso a paso:"]
+    for number, stage in enumerate(pipeline, start=1):
+        name, body = next(iter(stage.items()))
+        lines.append(f"\n{number}. {name}")
+        lines.append(stage_help.get(name, "Transforma los documentos en esta etapa."))
+
+        used = operators(body)
+        details = [
+            f"{operator}: {operator_help[operator]}"
+            for operator in used
+            if operator in operator_help
+        ]
+        if details:
+            lines.append("Operadores: " + "; ".join(details) + ".")
+
+        if name == "$sort":
+            fields = [
+                f"{field} ({'ascendente' if direction == 1 else 'descendente'})"
+                for field, direction in body.items()
+            ]
+            lines.append("Orden aplicado: " + ", ".join(fields) + ".")
+        elif name == "$project":
+            lines.append(
+                "Campos visibles o calculados: "
+                + ", ".join(str(field) for field in body)
+                + "."
+            )
+        elif name == "$match":
+            lines.append(
+                "Condiciones aplicadas: "
+                + json.dumps(body, ensure_ascii=False, separators=(",", ": "))
+            )
+        elif name == "$lookup":
+            lines.append(
+                f"Relaciona {body.get('localField', 'un campo local')} con "
+                f"{body.get('foreignField', 'un campo externo')} de "
+                f"{body.get('from', 'otra colección')}."
+            )
+        elif name == "$bucket":
+            lines.append(
+                "Rangos: "
+                + ", ".join(str(boundary) for boundary in body.get("boundaries", []))
+                + f"; valor fuera de rango: {body.get('default', 'sin default')}."
+            )
+
+    return "\n".join(lines)
+
+
+def summarize_results(results: list[dict]) -> str:
+    if not results:
+        return "La consulta se ejecutó correctamente, pero no encontró documentos."
+    if len(results) == 1:
+        return (
+            "La consulta devolvió un documento resumen. "
+            "La tabla muestra sus campos principales."
+        )
+    return (
+        f"La consulta devolvió {len(results)} documentos. "
+        "La tabla muestra una vista rápida del primero; el JSON completo está a la izquierda."
+    )
+
+
+def display_value(value: object, max_length: int = 100) -> str:
+    text = json.dumps(
+        json.loads(json_util.dumps(value)),
+        ensure_ascii=False,
+        separators=(",", ": "),
+    )
+    if len(text) > max_length:
+        return text[: max_length - 3] + "..."
+    return text
 
 
 class BdAutosApp(ctk.CTk):
@@ -147,7 +281,8 @@ class BdAutosApp(ctk.CTk):
 
         right = ctk.CTkFrame(body, fg_color=PANEL, corner_radius=14)
         right.grid(row=0, column=1, sticky="nsew")
-        right.grid_columnconfigure(0, weight=1)
+        right.grid_columnconfigure(0, weight=2)
+        right.grid_columnconfigure(1, weight=1)
         right.grid_rowconfigure(4, weight=1)
         right.grid_rowconfigure(6, weight=2)
 
@@ -159,7 +294,14 @@ class BdAutosApp(ctk.CTk):
             anchor="w",
             justify="left",
         )
-        self.title_lbl.grid(row=0, column=0, sticky="ew", padx=18, pady=(16, 4))
+        self.title_lbl.grid(
+            row=0,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            padx=18,
+            pady=(16, 4),
+        )
 
         self.desc_lbl = ctk.CTkLabel(
             right,
@@ -170,10 +312,24 @@ class BdAutosApp(ctk.CTk):
             justify="left",
             wraplength=780,
         )
-        self.desc_lbl.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 10))
+        self.desc_lbl.grid(
+            row=1,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            padx=18,
+            pady=(0, 10),
+        )
 
         actions = ctk.CTkFrame(right, fg_color="transparent")
-        actions.grid(row=2, column=0, sticky="ew", padx=18, pady=(0, 8))
+        actions.grid(
+            row=2,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            padx=18,
+            pady=(0, 8),
+        )
 
         self.meta_lbl = ctk.CTkLabel(
             actions,
@@ -200,7 +356,15 @@ class BdAutosApp(ctk.CTk):
             font=ctk.CTkFont(size=13, weight="bold"),
             text_color=TEXT,
             anchor="w",
-        ).grid(row=3, column=0, sticky="w", padx=18, pady=(4, 2))
+        ).grid(row=3, column=0, sticky="w", padx=(18, 10), pady=(4, 2))
+
+        ctk.CTkLabel(
+            right,
+            text="¿Cómo se construye?",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color="#234D2A",
+            anchor="w",
+        ).grid(row=3, column=1, sticky="w", padx=(8, 18), pady=(4, 2))
 
         self.code_box = ctk.CTkTextbox(
             right,
@@ -210,25 +374,166 @@ class BdAutosApp(ctk.CTk):
             corner_radius=10,
             wrap="none",
         )
-        self.code_box.grid(row=4, column=0, sticky="nsew", padx=18, pady=(0, 10))
+        self.code_box.grid(
+            row=4,
+            column=0,
+            sticky="nsew",
+            padx=(18, 10),
+            pady=(0, 10),
+        )
+
+        self.education_box = ctk.CTkTextbox(
+            right,
+            font=ctk.CTkFont(size=13),
+            fg_color="#E7F3E8",
+            text_color="#234D2A",
+            border_width=1,
+            border_color="#A8CFAE",
+            corner_radius=10,
+            wrap="word",
+        )
+        self.education_box.grid(
+            row=4,
+            column=1,
+            sticky="nsew",
+            padx=(8, 18),
+            pady=(0, 10),
+        )
 
         ctk.CTkLabel(
             right,
-            text="Resultado",
+            text="Resultado JSON completo",
             font=ctk.CTkFont(size=13, weight="bold"),
             text_color=TEXT,
             anchor="w",
-        ).grid(row=5, column=0, sticky="w", padx=18, pady=(4, 2))
+        ).grid(
+            row=5,
+            column=0,
+            sticky="w",
+            padx=(18, 10),
+            pady=(4, 2),
+        )
 
         self.result_box = ctk.CTkTextbox(
             right,
             font=ctk.CTkFont(family="Menlo", size=12),
-            fg_color="#F7F7F4",
-            text_color=TEXT,
+            fg_color="#EDF4FB",
+            text_color="#1D3850",
+            border_width=1,
+            border_color="#B7CEE3",
             corner_radius=10,
             wrap="none",
         )
-        self.result_box.grid(row=6, column=0, sticky="nsew", padx=18, pady=(0, 16))
+        self.result_box.grid(
+            row=6,
+            column=0,
+            sticky="nsew",
+            padx=(18, 10),
+            pady=(0, 16),
+        )
+
+        ctk.CTkLabel(
+            right,
+            text="Resumen de la respuesta",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color="#3A2D58",
+            anchor="w",
+        ).grid(
+            row=5,
+            column=1,
+            sticky="w",
+            padx=(8, 18),
+            pady=(4, 2),
+        )
+
+        summary_frame = ctk.CTkFrame(
+            right,
+            fg_color="#F1ECFA",
+            border_width=1,
+            border_color="#CFC1E8",
+            corner_radius=10,
+        )
+        summary_frame.grid(
+            row=6,
+            column=1,
+            sticky="nsew",
+            padx=(8, 18),
+            pady=(0, 16),
+        )
+        summary_frame.grid_columnconfigure(0, weight=1)
+        summary_frame.grid_rowconfigure(2, weight=1)
+
+        self.summary_count = ctk.CTkLabel(
+            summary_frame,
+            text="Aún no se ha ejecutado la consulta.",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color="#3A2D58",
+            anchor="w",
+            justify="left",
+            wraplength=300,
+        )
+        self.summary_count.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 4))
+
+        self.summary_box = ctk.CTkTextbox(
+            summary_frame,
+            height=64,
+            font=ctk.CTkFont(size=12),
+            fg_color="#FAF8FE",
+            text_color="#493A67",
+            border_width=0,
+            corner_radius=8,
+            wrap="word",
+        )
+        self.summary_box.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 8))
+
+        table_style = ttk.Style(self)
+        table_style.configure(
+            "BDAutos.Treeview",
+            background="#FAF8FE",
+            fieldbackground="#FAF8FE",
+            foreground="#493A67",
+            rowheight=25,
+            font=("Helvetica", 11),
+        )
+        table_style.configure(
+            "BDAutos.Treeview.Heading",
+            background="#DCCEF0",
+            foreground="#3A2D58",
+            font=("Helvetica", 11, "bold"),
+        )
+
+        table_frame = ctk.CTkFrame(summary_frame, fg_color="transparent")
+        table_frame.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 12))
+        table_frame.grid_columnconfigure(0, weight=1)
+        table_frame.grid_rowconfigure(0, weight=1)
+
+        self.summary_table = ttk.Treeview(
+            table_frame,
+            columns=("campo", "valor"),
+            show="headings",
+            height=7,
+            style="BDAutos.Treeview",
+        )
+        self.summary_table.heading("campo", text="Campo")
+        self.summary_table.heading("valor", text="Valor")
+        self.summary_table.column("campo", width=105, anchor="w")
+        self.summary_table.column("valor", width=190, anchor="w")
+        self.summary_table.grid(row=0, column=0, sticky="nsew")
+
+        table_scroll = ctk.CTkScrollbar(
+            table_frame,
+            orientation="vertical",
+            command=self.summary_table.yview,
+            fg_color="#E2D8F1",
+            button_color="#A995C8",
+            button_hover_color="#8D76B1",
+            width=12,
+        )
+        table_scroll.grid(row=0, column=1, sticky="ns")
+        self.summary_table.configure(yscrollcommand=table_scroll.set)
+
+        self.summary_table.tag_configure("odd", background="#F8F5FD")
+        self.summary_table.tag_configure("even", background="#EEE8F9")
 
     def _connect(self) -> None:
         try:
@@ -268,6 +573,11 @@ class BdAutosApp(ctk.CTk):
         self.code_box.insert("1.0", dumps(q["pipeline"]))
         self.code_box.configure(state="disabled")
 
+        self.education_box.configure(state="normal")
+        self.education_box.delete("1.0", "end")
+        self.education_box.insert("1.0", explain_pipeline(q["pipeline"]))
+        self.education_box.configure(state="disabled")
+
         self.result_box.configure(state="normal")
         self.result_box.delete("1.0", "end")
         self.result_box.insert(
@@ -275,6 +585,36 @@ class BdAutosApp(ctk.CTk):
             "Pulsa «Ejecutar consulta» para ver los datos resultantes.",
         )
         self.result_box.configure(state="disabled")
+        self._reset_summary()
+
+    def _reset_summary(self) -> None:
+        self.summary_count.configure(text="Aún no se ha ejecutado la consulta.")
+        self.summary_box.configure(state="normal")
+        self.summary_box.delete("1.0", "end")
+        self.summary_box.insert("1.0", "Aquí aparecerá una lectura rápida de la respuesta.")
+        self.summary_box.configure(state="disabled")
+        for item in self.summary_table.get_children():
+            self.summary_table.delete(item)
+
+    def _update_summary(self, results: list[dict]) -> None:
+        self.summary_count.configure(
+            text=f"{len(results)} documento{'s' if len(results) != 1 else ''} devuelto{'s' if len(results) != 1 else ''}"
+        )
+        self.summary_box.configure(state="normal")
+        self.summary_box.delete("1.0", "end")
+        self.summary_box.insert("1.0", summarize_results(results))
+        self.summary_box.configure(state="disabled")
+
+        for item in self.summary_table.get_children():
+            self.summary_table.delete(item)
+        if results and isinstance(results[0], dict):
+            for index, (field, value) in enumerate(results[0].items()):
+                self.summary_table.insert(
+                    "",
+                    "end",
+                    values=(field, display_value(value)),
+                    tags=("even" if index % 2 == 0 else "odd",),
+                )
 
     def execute_selected(self) -> None:
         if self.selected_id is None:
@@ -299,6 +639,7 @@ class BdAutosApp(ctk.CTk):
             self.result_box.delete("1.0", "end")
             self.result_box.insert("1.0", text + footer)
             self.result_box.configure(state="disabled")
+            self._update_summary(results)
             self.status.configure(
                 text=f"OK · Q{q['id']} · {len(results)} docs",
                 text_color="#2F6B3A",
@@ -309,6 +650,8 @@ class BdAutosApp(ctk.CTk):
             self.result_box.delete("1.0", "end")
             self.result_box.insert("1.0", err)
             self.result_box.configure(state="disabled")
+            self._reset_summary()
+            self.summary_count.configure(text="No se pudo generar el resumen.")
             self.status.configure(text="Error al ejecutar", text_color="#A11")
 
 

@@ -15,20 +15,20 @@
 ## 2026-11-02 — Arranque
 
 ### Qué
-Se creó la estructura exclusiva bajo `proyecto2doParcial/` y se copió `BDAutosU2.sql` a `data/`.
+Se creó la estructura del proyecto y se copió `BDAutosU2.sql` a `data/`.
 
 ### Cómo
 ```
-proyecto2doParcial/
+Proyecto-2a.-Evaluaci-n/
   data/          # SQL fuente
   scripts/       # migración y consultas mongosh
-  app/           # CLI Python
+  app/           # Aplicación Python con GUI
   docs/          # bitácora y decisiones
   reporte/       # PDF final
 ```
 
 ### Por qué
-El enunciado y el acuerdo del equipo exigen que **todo** el parcial quede dentro de esta carpeta (nada en la raíz de `BDA/`). La bitácora en `.md` documenta decisiones mientras se construye, no solo al final.
+El proyecto reúne datos, scripts, aplicación y evidencia en un mismo repositorio. La bitácora en `.md` documenta decisiones mientras se construye, no solo al final.
 
 ---
 
@@ -38,14 +38,14 @@ El enunciado y el acuerdo del equipo exigen que **todo** el parcial quede dentro
 Cuatro colecciones en `bdautos` + `scripts/migrate.py` con verificación de conteos.
 
 ### Cómo / por qué
-Ver [01_modelo_y_migracion.md](01_modelo_y_migracion.md). Se instaló MongoDB Community vía Homebrew y se validó `ping` + insert.
+Ver [01_modelo_y_migracion.md](01_modelo_y_migracion.md). MongoDB se ejecuta mediante Docker Compose y se valida `ping` + insert.
 
 ---
 
 ## 2026-11-02 — Consultas y app
 
 ### Qué
-25 pipelines en `app/queries.py`, export JS, CLI `app/main.py`. Ejecución completa (`all`) sin errores.
+25 pipelines en `app/queries.py` y export JS para `mongosh`. La fuente de verdad queda compartida por la GUI y el script JavaScript.
 
 ### Cómo / por qué
 Ver [02_consultas.md](02_consultas.md) y [03_aplicacion_python.md](03_aplicacion_python.md).
@@ -61,7 +61,17 @@ Se reemplazó el menú de terminal por una GUI CustomTkinter (`app/gui.py`).
 Lista lateral de las 25 consultas; panel de pipeline; botón Ejecutar; panel de resultados JSON.
 
 ### Por qué
-El requisito pide aplicación Python con visualización de código + datos; la interfaz gráfica deja eso explícito (no solo CLI).
+El requisito pide aplicación Python con visualización de código + datos; la interfaz gráfica deja eso explícito.
+
+---
+
+## 2026-11-03 — MongoDB reproducible con Docker
+
+### Qué
+Se agregó `docker-compose.yml` con MongoDB 7, healthcheck, reinicio automático y volumen persistente.
+
+### Cómo / por qué
+`iniciar.sh` levanta el contenedor, espera a que MongoDB responda, sincroniza la migración de forma idempotente y abre la GUI. Así el proyecto no depende de una instalación local de MongoDB.
 
 ---
 
@@ -88,7 +98,25 @@ El Tk del sistema en macOS está deprecado y en la práctica no mapea la ventana
 
 ---
 
-## 2026-11-02 — Reporte y cierre
+## 2026-11-03 — Presentación educativa de resultados
+
+### Qué
+Se agregó una explicación visual del pipeline y una presentación enriquecida de
+los resultados en la GUI.
+
+### Cómo
+El panel verde explica las etapas y operadores (`$match`, `$gte`, `$project`,
+`$sort`, `$group`, `$lookup`, entre otros). El resultado se muestra en un panel
+JSON azul y un resumen lila con contador, descripción y tabla desplazable de
+campos y valores.
+
+### Por qué
+La aplicación no solo ejecuta las consultas: también permite explicar
+visualmente cómo se construyen y cómo interpretar sus respuestas.
+
+---
+
+## 2026-11-03 — Reporte y cierre
 
 ### Qué
 HTML + PDF en `reporte/`, README y [04_entrega.md](04_entrega.md) con checklist.

@@ -5,12 +5,23 @@ cd "$(dirname "$0")"
 
 export TK_SILENCE_DEPRECATION=1
 
+if ! command -v docker >/dev/null 2>&1; then
+  echo "Docker no está instalado o no está disponible en PATH." >&2
+  exit 1
+fi
+
 if [[ ! -x .venv/bin/python ]]; then
   echo "No hay .venv. Créalo con:"
   echo "  /opt/homebrew/bin/python3.12 -m venv .venv"
   echo "  .venv/bin/pip install -r app/requirements.txt"
   exit 1
 fi
+
+echo "Iniciando MongoDB con Docker Compose..."
+docker compose up -d --wait mongodb
+
+echo "Sincronizando datos de BDAutos..."
+.venv/bin/python scripts/migrate.py --no-drop
 
 # Trae Python al frente en macOS (evita ventana invisible detrás del Terminal)
 osascript >/dev/null 2>&1 <<'APPLESCRIPT' || true
